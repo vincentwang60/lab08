@@ -118,7 +118,6 @@ def parse(tokens):
                 raise SnekSyntaxError
             return number_or_symbol(tokens[0])
         if tokens[0] == 'define':
-            #print('t',tokens)
             if len(tokens) < 3:
                 raise SnekSyntaxError
             if tokens[2] == '(': #if defining to expression
@@ -126,6 +125,21 @@ def parse(tokens):
                     #print('t',tokens[2:],find_paren(tokens[2:]))
                     raise SnekSyntaxError
             if not isinstance(number_or_symbol(tokens[1]),str):
+                raise SnekSyntaxError
+        if tokens[0] == 'lambda':
+            print('testing',tokens)
+            if len(tokens) < 3:
+                raise SnekSyntaxError
+            if tokens[1] != '(':  #check if list of params
+                raise SnekSyntaxError
+            left = find_paren(tokens[1:]) #end of params paren
+            #print('paren from 1 to', 1+left)
+            for i in range(2,1+left):
+                if not isinstance(number_or_symbol(tokens[i]),str):
+                     raise SnekSyntaxError
+            right = find_paren(tokens[left+2:])
+            #print('paren from ',2+left,'to',right+left+2)
+            if right + left + 3 != len(tokens):
                 raise SnekSyntaxError
         return p_helper(tokens[1:],out + [number_or_symbol(tokens[0])],brackets)
 
@@ -191,8 +205,15 @@ def evaluate(tree, env = Environment({})):
     #print('evaluating',tree,env.att)
     if isinstance(tree,list): #if tree is a list
         if tree[0] == 'define': #special define case
-            val = evaluate(tree[2], env)
-            env.define(tree[1],val)
+            print('defining',tree)
+            if isinstance(tree[1],list):
+                tree[2] = ['lambda',tree[1][1:],tree[2]]
+                print('new tree2',tree[2])
+                val = evaluate(tree[2], env)
+                env.define(tree[1][0],val)
+            else:
+                val = evaluate(tree[2], env)
+                env.define(tree[1],val)
             return val
         if tree[0] == 'lambda': #special lambda case
             return Function(tree[1],tree[2],env)
@@ -219,8 +240,6 @@ def evaluate(tree, env = Environment({})):
                 res2 = evaluate(tree[i].body,funcEnv)
                 return res2
             newTree.append(res)
-        print('newTree',newTree)
-        print('callable???',newTree[0],callable(newTree[0]),isinstance(newTree[0],Function))
         if callable(newTree[0]) or isinstance(newTree[0],Function):
             return newTree[0](newTree[1:])
         raise SnekEvaluationError
@@ -230,7 +249,8 @@ def evaluate(tree, env = Environment({})):
         return tree
     if tree in env.get_keys():#if tree is a str (var name)
         return env.get(tree)
-    raise SnekEvaluationError
+    print('t',tree,env.get_keys())
+    raise SnekNameError
 
 def result_and_env(tree, env = Environment({})):
     '''
