@@ -123,7 +123,7 @@ def parse(tokens):
                 raise SnekSyntaxError
             if tokens[2] == '(': #if defining to expression
                 if find_paren(tokens[2:]) != len(tokens[2:])-1:
-                    print('t',tokens[2:],find_paren(tokens[2:]))
+                    #print('t',tokens[2:],find_paren(tokens[2:]))
                     raise SnekSyntaxError
             if not isinstance(number_or_symbol(tokens[1]),str):
                 raise SnekSyntaxError
@@ -146,9 +146,37 @@ class Environment:
                 self.att[key] = snek_builtins[key]
         if parent == None:
             self.parent = Environment(snek_builtins, -1)
+        else:
+            self.parent = parent
 
     def define(self,key,value):
         self.att[key] = value
+
+    def get_keys(self):
+        out = set(self.att.keys())
+        if self.parent == None or self.parent == -1:
+            return out
+        res = self.parent.get_keys()
+        for r in res:
+            out.add(r)
+        return out
+
+    def get(self,key):
+        if key in self.att:
+            return self.att[key]
+        if self.parent != -1:
+            return self.parent.get(key)
+        raise KeyError
+
+class Function:
+    def __init__(self,param,body,env = Environment({})):
+        self.params = param
+        self.body = body
+        self.env = env
+    '''
+    def __str__(self):
+        return '\nFUNC\nparams:'+str(self.params)+'\nbody:'+str(self.body)+'\nenv!!'+str(self.env.att)
+    '''
 
 def evaluate(tree, env = Environment({})):
     """
@@ -160,35 +188,58 @@ def evaluate(tree, env = Environment({})):
                             parse function
         env: a optional pointer to an environment
     """
-    print('evaluating',tree,env.att)
+    #print('evaluating',tree,env.att)
     if isinstance(tree,list): #if tree is a list
         if tree[0] == 'define': #special define case
             val = evaluate(tree[2], env)
             env.define(tree[1],val)
             return val
-        else:
-            for i,el in enumerate(tree): #evaluate every el in list
-                tree[i] = evaluate(el, env)
-            if callable(tree[0]):
-                return tree[0](tree[1:])
+        if tree[0] == 'lambda': #special lambda case
+            return Function(tree[1],tree[2],env)
+        if not isinstance((tree[0]),list):#check for user defined func
+            #new function
+            if tree[0] in env.get_keys(): #named function
+                try:
+                    func = env.get(tree[0])
+                    funcEnv = Environment({},env)
+                    for i,p in enumerate(func.params):
+                        funcEnv.define(p,evaluate(tree[1:][i],func.env))
+                    res = evaluate(func.body,funcEnv)
+                    return res
+                except AttributeError:
+                    pass
+        newTree = []
+        for i,el in enumerate(tree): #evaluate every el in list
+            res = evaluate(el,env)
+            if isinstance(res,Function):
+                tree[i] = res
+                funcEnv = Environment({},res.env)
+                for j,p in enumerate(tree[i].params):
+                    funcEnv.define(p,evaluate(tree[1:][j],env))
+                res2 = evaluate(tree[i].body,funcEnv)
+                return res2
+            newTree.append(res)
+        print('newTree',newTree)
+        print('callable???',newTree[0],callable(newTree[0]),isinstance(newTree[0],Function))
+        if callable(newTree[0]) or isinstance(newTree[0],Function):
+            return newTree[0](newTree[1:])
         raise SnekEvaluationError
     if tree in snek_builtins: #if tree is an op
         return snek_builtins[tree]
     if isinstance(tree,(int,float)): #if tree is a number
         return tree
-    if tree in env.att:#if tree is a str (var name)
-        return env.att[tree]
-    print('hm',tree,env.att)
+    if tree in env.get_keys():#if tree is a str (var name)
+        return env.get(tree)
     raise SnekEvaluationError
 
 def result_and_env(tree, env = Environment({})):
     '''
     Returns a tuple with 2 elements: the result of the evaluation and the environment (even if no env passed)
     '''
-    print('result and env',tree,env.att)
     return (evaluate(tree,env),env)
 
 def repl():
+    gEnv = Environment({})
     quit = False
     while not quit:
         i = input('in:')
@@ -199,12 +250,8 @@ def repl():
             #print('token',t)
             p = parse(t)
             #print('parse',p)
-            eval = evaluate(p)
+            eval = evaluate(p,gEnv)
             print('out>',eval)
 
 if __name__ == "__main__":
-    '''s = '(define x (+ 2 3))'
-    t = tokenize(s)
-    print(t)
-    print(parse(t))'''
     repl()
