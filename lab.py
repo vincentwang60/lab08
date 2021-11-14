@@ -1,7 +1,4 @@
 import doctest
-###########################
-# Snek-related Exceptions #
-###########################
 class SnekError(Exception):
     """
     A type of exception to be raised if there is an error with a Snek
@@ -9,29 +6,22 @@ class SnekError(Exception):
     raised.
     """
     pass
-
 class SnekSyntaxError(SnekError):
     """
     Exception to be raised when trying to evaluate a malformed expression.
     """
     pass
-
 class SnekNameError(SnekError):
     """
     Exception to be raised when looking up a name that has not been defined.
     """
     pass
-
 class SnekEvaluationError(SnekError):
     """
     Exception to be raised if there is an error during evaluation other than a
     SnekNameError.
     """
     pass
-
-############################
-# Tokenization and Parsing #
-############################
 
 def number_or_symbol(x):
     """
@@ -77,7 +67,7 @@ def tokenize(source):
                 new_source+=" "+s+" "
             else:
                 new_source+=s
-    return new_source.split()
+    return new_source.split() #removes spaces and returns as list
 
 def find_paren(tokens):
     '''
@@ -91,7 +81,7 @@ def find_paren(tokens):
         if t == ')':
             rCount += 1
         if rCount == lCount:
-            return i
+            return i #return place of right paren
     raise SnekSyntaxError
 
 def parse(tokens):
@@ -103,58 +93,64 @@ def parse(tokens):
 
     Arguments:
         tokens (list): a list of strings representing tokens
-
-    In: ['(', '+', '2', '(', '-', '5', '3', ')', '7', '8', ')']
-    Out: ['+', 2, ['-', 5, 3], 7, 8]
-
-    In: ['(', 'define', 'circle-area', '(', 'lambda', '(', 'r', ')', '(', '*', '3.14', '(', '*', 'r', 'r', ')', ')', ')', ')']
-    Out: ['define', 'circle-area', ['lambda', ['r'], ['*', 3.14, ['*', 'r', 'r']]]]
-
-    In: ['(', 'cat', '(', 'dog', '(', 'tomato' ,')' , ')', ')']
-    Out: ['cat',['dog',['tomato']]]
-
-    In: ['(', 'a', '(', 'b', '(', 'c', ')', '(', 'd', 'e', ')', '(', '(', '(', '(', 'f', ')', ')', ')', ')', ')', ')']
-    Out: ['a', ['b', ['c'], ['d', 'e'], [[[['f']]]]]]
     """
     def p_helper(tokens,out,brackets):
         '''
         Given out and tokens, returns a parsed version of tokens and adds it to out
+        Brackets determines whether to wrap returned result in parentheses
         '''
-        if tokens == []:
+        #print('parse',tokens,out,brackets)
+        if tokens == []: #base case
             return out
-        if tokens[0] == '(':
+        if tokens[0] == '(': #if starts with paren, recursive call on expression
             res = p_helper(tokens[1:find_paren(tokens)],[],True)
             if brackets:
                 out.append(res)
             else:
                 out += res
             return p_helper(tokens[find_paren(tokens)+1:],out,brackets)
-        if tokens[0] == ')':
+        if tokens[0] == ')': #unmatched parentheses
             raise SnekSyntaxError
-        if len(tokens) < 2:
+        if len(tokens) < 2: #base case
             if brackets:
                 return out+[number_or_symbol(tokens[0])]
             if out != []:
                 raise SnekSyntaxError
             return number_or_symbol(tokens[0])
+        if tokens[0] == 'define':
+            #print('t',tokens)
+            if len(tokens) < 3:
+                raise SnekSyntaxError
+            if tokens[2] == '(': #if defining to expression
+                if find_paren(tokens[2:]) != len(tokens[2:])-1:
+                    print('t',tokens[2:],find_paren(tokens[2:]))
+                    raise SnekSyntaxError
+            if not isinstance(number_or_symbol(tokens[1]),str):
+                raise SnekSyntaxError
         return p_helper(tokens[1:],out + [number_or_symbol(tokens[0])],brackets)
 
     return p_helper(tokens,[],False)
 
-######################
-# Built-in Functions #
-######################
-
 snek_builtins = {
     "+": sum,
     "-": lambda args: -args[0] if len(args) == 1 else (args[0] - sum(args[1:])),
+    "*": lambda args: args[0] if len(args) == 1 else (args[0]*snek_builtins["*"](args[1:])),
+    "/": lambda args: args[0] if len(args) == 1 else (args[0]/(snek_builtins["*"](args[1:]))),
 }
 
-##############
-# Evaluation #
-##############
+class Environment:
+    def __init__(self,dict,parent = None):
+        self.att = {}
+        if dict != None:
+            for key in dict:
+                self.att[key] = snek_builtins[key]
+        if parent == None:
+            self.parent = Environment(snek_builtins, -1)
 
-def evaluate(tree):
+    def define(self,key,value):
+        self.att[key] = value
+
+def evaluate(tree, env = Environment({})):
     """
     Evaluate the given syntax tree according to the rules of the Snek
     language.
@@ -162,25 +158,53 @@ def evaluate(tree):
     Arguments:
         tree (type varies): a fully parsed expression, as the output from the
                             parse function
+        env: a optional pointer to an environment
     """
-    if isinstance(tree,list):
-        for i,el in enumerate(tree):
-            tree[i] = evaluate(el)
-        if callable(tree[0]):
-            return tree[0](tree[1:])
+    print('evaluating',tree,env.att)
+    if isinstance(tree,list): #if tree is a list
+        if tree[0] == 'define': #special define case
+            val = evaluate(tree[2], env)
+            env.define(tree[1],val)
+            return val
+        else:
+            for i,el in enumerate(tree): #evaluate every el in list
+                tree[i] = evaluate(el, env)
+            if callable(tree[0]):
+                return tree[0](tree[1:])
         raise SnekEvaluationError
-    if tree in snek_builtins:
+    if tree in snek_builtins: #if tree is an op
         return snek_builtins[tree]
-    if isinstance(tree,(int,float)):
+    if isinstance(tree,(int,float)): #if tree is a number
         return tree
+    if tree in env.att:#if tree is a str (var name)
+        return env.att[tree]
+    print('hm',tree,env.att)
     raise SnekEvaluationError
 
+def result_and_env(tree, env = Environment({})):
+    '''
+    Returns a tuple with 2 elements: the result of the evaluation and the environment (even if no env passed)
+    '''
+    print('result and env',tree,env.att)
+    return (evaluate(tree,env),env)
+
+def repl():
+    quit = False
+    while not quit:
+        i = input('in:')
+        if i == 'QUIT':
+            quit = True
+        else:
+            t = tokenize(i)
+            #print('token',t)
+            p = parse(t)
+            #print('parse',p)
+            eval = evaluate(p)
+            print('out>',eval)
+
 if __name__ == "__main__":
-    # doctest.testmod()
-    #t = ['(', 'a', '(', 'b', '(', 'c', ')', '(', 'd', 'e', ')', '(', '(', '(', '(', 'f', ')', ')', ')', ')', ')', ')']
-    #t = ['(', 'define', 'circle-area', '(', 'lambda', '(', 'r', ')', '(', '*', '3.14', '(', '*', 'r', 'r', ')', ')', ')', ')']
-    #t = ['x']
-    #t = ['(', 'cat', '(', 'dog', '(', 'tomato' ,')' , ')', ')']
-    #print('res',parse(t))
-    #print(evaluate(['-']))
-    print(evaluate(['+', 3, 7, 2]))
+    '''s = '(define x (+ 2 3))'
+    t = tokenize(s)
+    print(t)
+    print(parse(t))'''
+    repl()

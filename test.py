@@ -242,7 +242,6 @@ def test_nested_defines():
 def test_syntax_errors():
     do_raw_continued_evaluations(29)
 
-
 if __name__ == '__main__':
     import os
     import sys
