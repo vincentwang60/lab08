@@ -1,4 +1,22 @@
 import doctest
+'''
+for bad loopups, input is:
+(define spam x)
+eggs
+
+and it expects a sneknameerror because x doesn't exist
+but it looks like bc ofthe way do_continued_evaluations works, it saves the variable definition
+
+from test case 7 here:
+(define somevariable (+ 1 2))
+(+ 7 (* somevariable 2 somevariable))
+(define x 2)
+(define y x)
+(define x 3)
+x
+y
+
+'''
 class SnekError(Exception):
     """
     A type of exception to be raised if there is an error with a Snek
