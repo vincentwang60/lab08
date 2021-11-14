@@ -1,22 +1,4 @@
 import doctest
-'''
-for bad loopups, input is:
-(define spam x)
-eggs
-
-and it expects a sneknameerror because x doesn't exist
-but it looks like bc ofthe way do_continued_evaluations works, it saves the variable definition
-
-from test case 7 here:
-(define somevariable (+ 1 2))
-(+ 7 (* somevariable 2 somevariable))
-(define x 2)
-(define y x)
-(define x 3)
-x
-y
-
-'''
 class SnekError(Exception):
     """
     A type of exception to be raised if there is an error with a Snek
@@ -145,7 +127,6 @@ def parse(tokens):
             if not isinstance(number_or_symbol(tokens[1]),str):
                 raise SnekSyntaxError
         if tokens[0] == 'lambda':
-            print('testing',tokens)
             if len(tokens) < 3:
                 raise SnekSyntaxError
             if tokens[1] != '(':  #check if list of params
@@ -205,10 +186,10 @@ class Function:
         self.params = param
         self.body = body
         self.env = env
-    '''
+        '''
     def __str__(self):
         return '\nFUNC\nparams:'+str(self.params)+'\nbody:'+str(self.body)+'\nenv!!'+str(self.env.att)
-    '''
+        '''
 
 def evaluate(tree, env = Environment({})):
     """
@@ -220,13 +201,10 @@ def evaluate(tree, env = Environment({})):
                             parse function
         env: a optional pointer to an environment
     """
-    #print('evaluating',tree,env.att)
     if isinstance(tree,list): #if tree is a list
         if tree[0] == 'define': #special define case
-            print('defining',tree)
             if isinstance(tree[1],list):
                 tree[2] = ['lambda',tree[1][1:],tree[2]]
-                print('new tree2',tree[2])
                 val = evaluate(tree[2], env)
                 env.define(tree[1][0],val)
             else:
@@ -238,19 +216,24 @@ def evaluate(tree, env = Environment({})):
         if not isinstance((tree[0]),list):#check for user defined func
             #new function
             if tree[0] in env.get_keys(): #named function
-                try:
-                    func = env.get(tree[0])
-                    funcEnv = Environment({},env)
-                    for i,p in enumerate(func.params):
-                        funcEnv.define(p,evaluate(tree[1:][i],func.env))
-                    res = evaluate(func.body,funcEnv)
-                    return res
-                except AttributeError:
-                    pass
+                if isinstance(env.get(tree[0]),Function) or callable(env.get(tree[0])):
+                    print('alirhgt',tree[0],isinstance(env.get(tree[0]),Function),callable(env.get(tree[0])))
+                    try:
+                        func = env.get(tree[0])
+                        print('named func',tree[0],func.env.att)
+                        funcEnv = Environment({},func.env)
+                        if len(tree) > 1:
+                            for i,p in enumerate(func.params):
+                                print('uh oh',tree,tree[1:])
+                                funcEnv.define(p,evaluate(tree[1:][i],env))
+                        res = evaluate(func.body,funcEnv)
+                        return res
+                    except AttributeError:
+                        pass
         newTree = []
         for i,el in enumerate(tree): #evaluate every el in list
             res = evaluate(el,env)
-            if isinstance(res,Function):
+            if isinstance(res,Function): #if unnamed function
                 tree[i] = res
                 funcEnv = Environment({},res.env)
                 for j,p in enumerate(tree[i].params):
@@ -290,6 +273,9 @@ def repl():
             #print('parse',p)
             eval = evaluate(p,gEnv)
             print('out>',eval)
+
+def doshit(str,env):
+    print(evaluate(parse(tokenize(str))))
 
 if __name__ == "__main__":
     repl()
